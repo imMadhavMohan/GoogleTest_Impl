@@ -22,3 +22,35 @@ Ensures MISRA C/C++ adherence for safety-critical systems.
 Finds runtime bugs at compile time.
 Integrates into the developer workflow so defects are caught early.
 
+In your QNX build directory:
+2️⃣ Instrument Your Build: Klocwork needs to intercept all compile commands to create a project build specification.
+# Clean build first
+make clean
+# Intercept build commands
+kwinject --output kwinject.out make
+This generates kwinject.out — the build specification file.
+
+3️⃣ Create the Klocwork Project
+kwbuildproject --url http://klocwork-server:8080 \
+               --project my_adas_project \
+               kwinject.out
+Here:
+my_adas_project = project name in Klocwork server
+kwinject.out = build spec from step 2
+
+4️⃣ Run the Analysis
+kwaudit --url http://klocwork-server:8080 my_adas_project
+This will:
+Send results to the server
+Allow viewing them in Klocwork Review Portal or IDE
+
+5️⃣ Enable MISRA Compliance Checks
+In Klocwork server:
+Go to Project Settings → Analysis Profile
+Select MISRA C 2012 or MISRA C++ 2008 / AUTOSAR C++14
+Save and re-run analysis.
+
+3. Common Add-ons in Automotive
+MISRA C/C++ checker – for ISO 26262 compliance.
+AUTOSAR C++14 checker – for modern automotive codebases.
+CI/CD Plugins – Jenkins, GitLab, Azure DevOps integration.
