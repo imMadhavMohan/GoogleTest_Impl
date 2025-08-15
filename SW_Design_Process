@@ -1,0 +1,74 @@
+SWE1: Requirement Derivation
+At the SWE1 (Entry-Level) stage, the engineer is usually focused on understanding the requirements and how they translate into tasks that can be implemented in the codebase.
+Tasks and Focus:
+Requirement Derivation involves understanding the business requirements and how they translate into technical requirements.
+An entry-level engineer may not directly handle the derivation process but will assist in:
+Reviewing requirements documents.
+Clarifying questions for senior engineers or product managers.
+Learning to break down high-level requirements into smaller technical tasks.
+Collaborating with senior team members to ensure they understand how to approach problem-solving from a business perspective.
+
+SWE2: Architecture Diagram (Arch Diag)
+At SWE2 (Mid-Level), the engineer has more autonomy and takes on tasks related to system design and architecture.
+Tasks and Focus:
+Architecture Diagrams: A mid-level engineer can assist in creating architecture diagrams to represent how different components of the system interact.
+Design the structure of components, classes, and modules.
+Define interfaces between different systems and services.
+Work with senior engineers to validate the design and ensure that it meets both the functional and non-functional requirements (e.g., scalability, security, etc.).
+Collaboration: Often works with product owners and senior engineers to ensure alignment between the technical solution and business needs.
+
+SWE3.1: System Design Document (SDD) Diagram
+At SWE3.1 (Senior-Level), the engineer plays a key role in architectural decisions and creates more detailed design documents.
+Tasks and Focus:
+System Design Documents (SDD): A senior engineer is responsible for creating and refining detailed design documents that guide the implementation of a system.
+Create SDD Diagrams: Diagrams include detailed views of system components, data flow, and interaction between modules.
+Clarify Non-Functional Requirements: Ensuring performance, scalability, and maintainability are accounted for in the design.
+Provide a blueprint for developers to follow during implementation, ensuring consistency and alignment with overall architecture.
+Mentoring: In this stage, the engineer might mentor junior team members on proper design practices.
+
+SWE3.2: Implementation
+At SWE3.2 (Senior-Level), engineers take ownership of writing production-level code and implementing the designs outlined in previous stages.
+Tasks and Focus:
+Implementation: The engineer is responsible for translating design documents and architecture into actual code.
+Implement complex features and modules according to the system design.
+Integrate with other components, ensuring everything works as expected.
+Focus on code quality, performance, and maintainability.
+Use best practices in coding standards, debugging, and error handling.
+Collaborate closely with SWE2 engineers to ensure that tasks are implemented in alignment with the overall design.
+
+SWE4: Unit Testing
+At SWE4 (Staff Engineer), the focus shifts towards ensuring that individual components or units of the software function correctly.
+Tasks and Focus:
+Unit Testing: A Staff Engineer typically leads the effort to ensure that all individual components of the code are properly tested.
+Write unit tests to verify that each function, method, or class works as intended.
+Use Test-Driven Development (TDD) to ensure that tests are created alongside code.
+Ensure tests are automated, repeatable, and run frequently as part of the build pipeline.
+Encourage best practices in testing and ensure that the team follows consistent test coverage policies.
+
+SWE5: Integration Testing
+At SWE5 (Principal Engineer), the engineer focuses on testing how the system components integrate and work together.
+Tasks and Focus:
+Integration Testing: The Principal Engineer typically oversees or executes integration testing, ensuring that different software modules or services function as expected when integrated.
+Test interactions between different subsystems, databases, APIs, and external services.
+Ensure that data flows correctly between modules and that edge cases or error states are handled appropriately.
+Collaborate with QA to ensure full test coverage and effective testing strategies.
+Optimize integration processes, identify performance bottlenecks, and drive improvements in integration workflows.
+
+SWE6: Quality Testing
+At SWE6 (Engineering Manager or Lead Engineer), the engineer (or often the manager) is responsible for overseeing the overall quality of the product, including how it fits into the broader system and customer expectations.
+Tasks and Focus:
+Quality Testing: This is the final validation that the system is ready for production and meets all quality standards.
+Ensure that all testing activities (unit, integration, system, performance, and user acceptance) are conducted thoroughly.
+Oversee testing strategies at an organization-wide level, ensuring that quality gates are met.
+Lead performance and load testing to simulate real-world conditions and ensure system reliability.
+Ensure continuous quality improvement through process enhancements, team retrospectives, and feedback loops.
+
+Summary of the Process Across SWE Levels:
+SWE1: Focuses on requirement derivation, understanding customer needs, and translating them into smaller tasks.
+SWE2: Takes part in creating architecture diagrams and high-level system designs.
+SWE3.1: Develops detailed system design documentation and architecture blueprints (SDDs).
+SWE3.2: Implements the designs into functional software solutions, writing production-level code.
+SWE4: Ensures the reliability of individual code components through unit testing and automated test coverage.
+SWE5: Focuses on testing how modules integrate with each other through integration testing to ensure system-wide functionality.
+
+SWE6: Ensures overall quality testing, overseeing the product’s readiness for production and ensuring that it meets both technical and customer quality standards.
