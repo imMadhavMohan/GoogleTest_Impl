@@ -1,0 +1,24 @@
+Klocwork is a Static Code Analysis Tool used mainly in automotive, aerospace, embedded systems, and safety-critical software to detect defects, vulnerabilities, and compliance issues in C, C++, C#, Java, Python, and other languages before
+runtime.
+🔍 What Klocwork Does
+
+Static Code Analysis — examines source code without executing it.
+
+Detects:
+Memory leaks, null pointer dereferences, Uninitialized var, Segmentation fault
+Buffer overflows, out-of-bounds access
+Concurrency issues (race conditions, deadlocks)
+MISRA C/C++ and AUTOSAR C++14 rule violations
+Security vulnerabilities (e.g., CWE, CERT)
+Integrates with:
+IDEs (Visual Studio, Eclipse, CLion)
+Build systems (Make, CMake, Bazel)
+CI/CD tools (Jenkins, GitLab CI, Azure DevOps)
+Generates detailed reports with code location, defect description, and remediation guidance.
+
+💡 Why Automotive Teams Use It
+Meets ISO 26262 (functional safety) compliance.
+Ensures MISRA C/C++ adherence for safety-critical systems.
+Finds runtime bugs at compile time.
+Integrates into the developer workflow so defects are caught early.
+
