@@ -1,0 +1,731 @@
+🏗 What is FreeRTOS?
+FreeRTOS is a Real-Time Operating System (RTOS) kernel for embedded devices (like microcontrollers).
+It helps you run multiple tasks (small programs) in parallel, and ensures that time-critical tasks always get CPU time when needed.
+
+🧩 FreeRTOS Architecture (Simple View)
+Think of FreeRTOS as a traffic controller for tasks:
+Tasks (like mini-programs)
+Each task is like a person working in a company.
+
+Example:
+Task A → Read sensor
+Task B → Send data to Wi-Fi
+Task C → Blink LED
+
+Scheduler (the manager)
+Decides which task runs and when.
+Uses priority levels (important tasks get more attention).
+Can do:
+Preemptive Scheduling → If a higher priority task comes, it interrupts the lower one.
+Cooperative Scheduling → Tasks give up CPU voluntarily.
+
+Queues, Semaphores, Mutexes (communication & coordination tools)
+Queues → Passing messages safely between tasks.
+(like a mailbox)
+Semaphores → Signals to control task execution.
+(like a green/red traffic light)
+Mutex → Protects shared resources.
+(like only one person can use a printer at a time).
+
+Tick Timer (the clock)
+A hardware timer interrupts the CPU at regular intervals (called tick).
+The scheduler uses this to decide task switching.
+Example: Tick = every 1 ms → Scheduler checks priorities 1000 times per second.
+
+Idle Task
+Runs when no other task is ready.
+Can be used for background cleanup or putting the system in low power mode.
+
+/**********************************************#***************************************************/
+🔄 FreeRTOS Task Execution Flow
+1. Task Creation
+
+You write a function for your task, e.g.:
+void vTaskLED(void *pvParameters) { // Any name
+    for(;;) {
+        // Toggle LED
+        vTaskDelay(1000 / portTICK_PERIOD_MS);
+    }
+}
+
+xTaskCreate(vTaskLED, "LED", 128, NULL, 1, NULL); // stnd API
+"LED" → Task name (for debugging).
+128 → Stack size (how much memory the task can use).
+1 → Priority (higher number = more important).
+
+BaseType_t xTaskCreate(
+    TaskFunction_t pxTaskCode,   // Task function
+    const char * const pcName,   // Task name
+    configSTACK_DEPTH_TYPE usStackDepth, // Stack size
+    void *pvParameters,          // Parameters to pass
+    UBaseType_t uxPriority,      // Task priority
+    TaskHandle_t *pxCreatedTask  // Handle to the created task: If you want to later suspend, delete, or control the task, you need its handle.
+								 // If you don’t care → pass NULL.
+);
+
+/*************************************#**************************************/
+TaskHandle_t xHandle = NULL;
+int ledPin = 13; // so task knows which pin to blink.
+
+void vTaskLED(void *pvParameters) {
+    int pin = *(int*)pvParameters;   // read parameter
+    for(;;) {
+        printf("Blinking LED on pin %d\n", pin);
+        vTaskDelay(1000 / portTICK_PERIOD_MS);
+    }
+}
+
+int main(void) {
+    xTaskCreate(vTaskLED, "LED", 128, &ledPin, 1, &xHandle);
+
+    // Later I can delete the task
+    // vTaskDelete(xHandle);
+
+    vTaskStartScheduler();
+}
+/*************************************#****************************************/
+
+A Task Handle is like an ID card for your task.
+With it, you can later:
+Suspend a task (vTaskSuspend); //vTaskSuspend(xLedTaskHandle)
+Resume a task (vTaskResume); // vTaskResume(xLedTaskHandle); 
+Delete a task (vTaskDelete); //vTaskDelete(xLedTaskHandle)
+Check task state
+
+#include "FreeRTOS.h"
+#include "task.h"
+#include <stdio.h>
+
+TaskHandle_t xLedTaskHandle = NULL;  // Global handle for LED task
+
+/* LED Task */
+void vTaskLED(void *pvParameters) {
+    for(;;) {
+        printf("LED Task: Blinking LED...\n");
+        vTaskDelay(pdMS_TO_TICKS(1000));
+    }
+}
+
+/* Controller Task (Higher Priority) */
+void vTaskController(void *pvParameters) {
+    for(;;) {
+        printf("Controller: Suspending LED Task...\n");
+        vTaskSuspend(xLedTaskHandle);   // Pause LED task
+        vTaskDelay(pdMS_TO_TICKS(3000)); 
+
+        printf("Controller: Resuming LED Task...\n");
+        vTaskResume(xLedTaskHandle);    // Resume LED task
+        vTaskDelay(pdMS_TO_TICKS(3000));
+    }
+}
+
+int main(void) {
+    // Create LED Task (priority 1)
+    xTaskCreate(vTaskLED, "LED", 128, NULL, 1, &xLedTaskHandle);
+
+    // Create Controller Task (priority 2 → higher than LED)
+    xTaskCreate(vTaskController, "CTRL", 128, NULL, 2, NULL);
+
+    // Start Scheduler
+    vTaskStartScheduler();
+
+    for(;;);
+}
+At start: LED task blinks every 1s.
+Controller suspends LED task → LED stops blinking.
+After 3s, controller resumes LED task → LED starts blinking again.
+This cycle repeats.
+/*********************************************#*******************************************/
+
+CONTEXT_SWITCHING:
+This includes:
+
+CPU Registers (R0–R15 on ARM Cortex, etc.)
+Program Counter (PC) → where the task left off in code
+Stack Pointer (SP) → where local variables & return addresses are stored
+Status Registers (like flags, interrupt masks)
+ 
+🕒 Timeline Example
+
+Imagine two tasks:
+Task A (Low Priority) → Blinks LED
+Task B (High Priority) → Reads sensor
+
+Flow:
+At t=0 → Task A is running (LED blinking).
+At t=10 ms → Sensor data ready → Task B becomes ready.
+Scheduler runs → Context of Task A saved, Task B’s context restored.
+Task B runs → Reads sensor, processes data.
+Task B blocks (waiting for next sensor event).
+Scheduler switches back → Restores Task A’s context.
+Task A continues blinking as if nothing happened.
+
+🔄 How Context Switching Works in FreeRTOS
+
+Task A is running.
+Its registers, stack, and program counter are live in the CPU.
+Tick interrupt (SysTick) fires.
+Interrupt handler runs and tells the scheduler: “Time to check priorities.”
+Scheduler decides a higher-priority task (Task B) is ready.
+Save Task A’s context.
+Push CPU registers, PC, SP, etc. onto Task A’s stack.
+Store the stack pointer in Task A’s Task Control Block (TCB).
+Restore Task B’s context.
+Load Task B’s saved stack pointer from its TCB.
+Pop its registers and program counter back into the CPU.
+CPU resumes Task B exactly where it left off.
+/*********************************************#*****************************************/
+
+2. Tasks & Scheduling
+Task creation (xTaskCreate, priorities, stack size).
+Task states: Running, Ready, Blocked, Suspended, Deleted.
+Scheduler types in FreeRTOS: Preemptive, Cooperative.
+Context switching (what’s saved/restored).
+Idle task and its role (low power management, cleanup).
+Priority inversion problem & solutions (priority inheritance, mutex).
+
+3. Inter-Task Communication
+Queues: how they work, blocking vs non-blocking, ISR-safe (xQueueSendFromISR).
+Semaphores: binary, counting, and differences.
+Mutex: difference vs binary semaphore (ownership, priority inheritance).
+Event Groups: signaling multiple tasks.
+Message Buffers / Stream Buffers: continuous data streams.
+
+4. Timing & Delays
+Tick timer: how SysTick works.
+vTaskDelay vs vTaskDelayUntil (difference: relative vs absolute timing).
+Tickless idle mode (low power).
+How FreeRTOS handles timeouts.
+
+5. Memory Management
+Task stack allocation (static vs dynamic).
+pvPortMalloc, heap implementations (heap_1 … heap_5).
+Stack overflow detection in FreeRTOS.
+Fragmentation issues in embedded systems.
+
+6. Interrupts in FreeRTOS
+Writing ISR-safe code.
+Functions allowed/not allowed in ISRs.
+FromISR API variants (e.g., xQueueSendFromISR).
+Interrupt nesting and priority rules on Cortex-M.
+PendSV & SysTick roles in context switching.
+
+7. Synchronization Issues
+Deadlocks (what, why, how to avoid).
+Starvation.
+Race conditions.
+Priority inversion (and FreeRTOS’s solution: mutex with priority inheritance).
+
+8. System Architecture & Debugging
+FreeRTOS Task Control Block (TCB) structure.
+How scheduler chooses tasks.
+Tick hook and idle hook functions.
+Debugging with trace tools (FreeRTOS+Trace, Percepio Tracealyzer).
+Common pitfalls: stack overflow, incorrect ISR handling.
+
+/*********************************📊 FreeRTOS Task States**********************/
+Running:	The task currently executing on the CPU. Only one task can be in this state.
+Ready:	Task is ready to run but not currently executing (waiting for CPU time).
+Blocked:	Task is waiting for an event (e.g., delay, semaphore, queue).
+Suspended:	Task is inactive and will not be scheduled until explicitly resumed.
+Deleted:	Task has been removed from the scheduler and its resources are freed.
+
+Ready → Running: When the scheduler selects the task.
+Running → Blocked: When the task calls vTaskDelay(), waits for a semaphore, etc.
+Blocked → Ready: When the event occurs (e.g., delay expires).
+Running → Suspended: When vTaskSuspend() is called.
+Suspended → Ready: When vTaskResume() is called.
+Any → Deleted: When vTaskDelete() is called.
+
+/********************************InterviewSpecific******************************/
+🔹 Level 2: Important (Mid-Level / 2–4 YOE)
+These go a bit deeper — used to check if you really worked with RTOS:
+Priority inversion → what it is, how FreeRTOS solves it.
+Mutex with priority inheritance.
+Counting semaphore vs binary semaphore.
+Event groups (synchronizing multiple tasks).
+ISR-safe functions (xQueueSendFromISR, xSemaphoreGiveFromISR).
+Restrictions inside ISRs (why vTaskDelay is illegal).
+Heap memory management in FreeRTOS (heap_1 … heap_5).
+Stack overflow detection in FreeRTOS.
+Tickless idle mode (low power).
+Real-time concepts: hard vs soft real-time, jitter.
+👉 This is the level expected in automotive, IoT, or mid-level embedded engineer roles.
+**************************************
+
+**************************************Priority Inversion Problem**************************
+step1:
+Task   State     Priority   Note
+-------------------------------------------
+L      Running   1          Holds mutex
+M      Ready     2          Not using mutex
+H      Ready     3          Wants mutex (not asked yet)
+step2:
+Task   State     Priority   Note
+-------------------------------------------
+L      Running   1          Holds mutex
+M      Ready     2          Not using mutex
+H      Blocked   3          Waiting for mutex
+⚡ Scheduler sees: H blocked, M ready, L running → L keeps running.
+step3:
+Task   State     Priority   Note
+-------------------------------------------
+L      Ready     1          Still holding mutex
+M      Running   2          Preempts L, doing its own work
+H      Blocked   3          Still waiting for mutex
+⚡ Even though H has the highest priority, it’s blocked.
+⚡ Scheduler runs M (priority 2) because it’s the highest ready task.
+⚡ L is delayed → cannot release mutex → H keeps waiting.
+This mismatch = priority inversion
+Solution: To this problem is Priority_Inheritance.
+
+#include "FreeRTOS.h"
+#include "task.h"
+#include "semphr.h"
+
+SemaphoreHandle_t xMutex;
+
+/* ---------------- Tasks ------------------ */
+void vTaskLow(void *pvParameters)
+{
+    for (;;)
+    {
+        /* Try to lock the shared resource */
+        if (xSemaphoreTake(xMutex, portMAX_DELAY) == pdTRUE)
+        {
+            // Simulate long work with resource
+            for (int i = 0; i < 1000000; i++)
+            {
+                // Holding mutex (H may block here)
+            }
+
+            xSemaphoreGive(xMutex); // Release
+        }
+        vTaskDelay(pdMS_TO_TICKS(500));
+    }
+}
+
+void vTaskMedium(void *pvParameters)
+{
+    for (;;)
+    {
+        // Does unrelated work, no mutex
+        for (int i = 0; i < 1000000; i++)
+        {
+            // Just wasting CPU cycles
+        }
+        vTaskDelay(pdMS_TO_TICKS(100));
+    }
+}
+
+void vTaskHigh(void *pvParameters)
+{
+    for (;;)
+    {
+        /* Wants the same mutex as Low */
+        if (xSemaphoreTake(xMutex, portMAX_DELAY) == pdTRUE)
+        {
+            // Critical section
+            // High-priority work
+            xSemaphoreGive(xMutex);
+        }
+        vTaskDelay(pdMS_TO_TICKS(100));
+    }
+}
+
+/* ---------------- Main ------------------ */
+int main(void)
+{
+    xMutex = xSemaphoreCreateMutex(); // Mutex supports priority inheritance
+
+    if (xMutex != NULL)
+    {
+        // Create tasks: stack size 128 words, priorities: H=3, M=2, L=1
+        xTaskCreate(vTaskLow, "LOW", 128, NULL, 1, NULL);
+        xTaskCreate(vTaskMedium, "MEDIUM", 128, NULL, 2, NULL);
+        xTaskCreate(vTaskHigh, "HIGH", 128, NULL, 3, NULL);
+
+        vTaskStartScheduler();
+    }
+
+    for (;;);
+}
+🔹 What is portMAX_DELAY?
+It’s a special constant defined in FreeRTOS (FreeRTOS.h) that represents the maximum possible block time a task can wait.
+#define portMAX_DELAY   ( TickType_t ) 0xffffffffUL   // on 32-bit; 👉 “Block forever until the resource is available.”
+
+So we can pass portMAX_DELAY as the timeout in functions like:
+xSemaphoreTake()
+xQueueReceive()
+xQueueSend()
+
+✅ Behavior with Priority Inheritance (Mutex)
+Low locks mutex.
+High tries → blocked.
+FreeRTOS boosts Low’s priority to 3 (same as High).
+Medium can’t preempt Low anymore.
+Low finishes and releases mutex → High runs immediately.
+
+🔹Prove Priority Inheritance Happening:
+Interviewer checks if you know practical debugging tools (vTaskList, vTaskGetInfo).
+
+#include "FreeRTOS.h"
+#include "task.h"
+#include "semphr.h"
+#include <stdio.h>
+
+/* Task Handles */
+TaskHandle_t xTaskLowHandle, xTaskMedHandle, xTaskHighHandle;
+SemaphoreHandle_t xMutex;
+
+/* Function to print task info (using vTaskGetInfo) */
+void PrintTaskInfo(TaskHandle_t taskHandle, const char *msg)
+{
+    TaskStatus_t xTaskDetails;
+    vTaskGetInfo(taskHandle, &xTaskDetails, pdTRUE, eInvalid);
+    printf("[%s] Task: %s, Priority: %lu, State: %d\n",
+           msg,
+           xTaskDetails.pcTaskName,
+           (unsigned long)xTaskDetails.uxCurrentPriority,
+           xTaskDetails.eCurrentState);
+}
+
+/* Utility: Print Task Info */
+void printTaskInfo(void)
+{
+    char buffer[256];
+    vTaskList(buffer); // Needs configUSE_TRACE_FACILITY = 1 in FreeRTOSConfig.h.
+    printf("\nTask   State  Prio Stack Num\n");
+    printf("%s\n", buffer);
+}
+
+/* ------------------ TASKS ------------------ */
+
+/* Low Priority Task: takes mutex and simulates long work */
+void vTaskLow(void *pvParameters)
+{
+    for(;;)
+    {
+        if(xSemaphoreTake(xMutex, portMAX_DELAY) == pdTRUE)
+        {
+            printf("Low: Took mutex, doing long work...\n");
+            printTaskInfo();
+
+            /* Simulate long work (keeping mutex) */
+            vTaskDelay(pdMS_TO_TICKS(3000));
+
+            printf("Low: Releasing mutex.\n");
+            xSemaphoreGive(xMutex);
+            printTaskInfo();
+        }
+        vTaskDelay(pdMS_TO_TICKS(2000));
+    }
+}
+
+/* Medium Priority Task: does some unrelated work */
+void vTaskMed(void *pvParameters)
+{
+    for(;;)
+    {
+        printf("Medium: Running independent work...\n");
+        vTaskDelay(pdMS_TO_TICKS(500));
+    }
+}
+
+/* High Priority Task: needs the same mutex */
+void vTaskHigh(void *pvParameters)
+{
+    for(;;)
+    {
+        vTaskDelay(pdMS_TO_TICKS(1000));  // Start after Low has mutex
+        printf("High: Wants mutex...\n");
+
+        if(xSemaphoreTake(xMutex, portMAX_DELAY) == pdTRUE)
+        {
+            printf("High: Got mutex! Doing quick work.\n");
+            vTaskDelay(pdMS_TO_TICKS(500));
+            xSemaphoreGive(xMutex);
+        }
+    }
+}
+
+/* ------------------ MAIN ------------------ */
+
+int main(void)
+{
+    /* Create mutex (with priority inheritance enabled) */
+    xMutex = xSemaphoreCreateMutex();
+
+    /* Create tasks */
+    xTaskCreate(vTaskLow,  "Low",   256, NULL, 1, &xTaskLowHandle);
+    xTaskCreate(vTaskMed,  "Med",   256, NULL, 2, &xTaskMedHandle);
+    xTaskCreate(vTaskHigh, "High",  256, NULL, 3, &xTaskHighHandle);
+
+    /* Start scheduler */
+    vTaskStartScheduler();
+
+    for(;;);
+}
+/*******************************#****************************/
+🔹 What Happens Step by Step
+Low (priority 1) takes mutex and starts “long work.”
+ It holds the mutex.
+High (priority 3) wakes up and wants the mutex.
+ It blocks, waiting for Low.
+ Normally, Medium (priority 2) could run forever → priority inversion!
+But FreeRTOS boosts Low’s priority to 3 (High’s level).
+ So Low preempts Medium.
+ Low quickly finishes and releases mutex.
+High gets mutex immediately.
+ After Low releases, its priority goes back to 1.
+Medium runs normally again.
+
+/*****************************#********************************/
+Low: Took mutex, doing long work...
+
+Task   State Prio Stack Num
+Low    R     1    200   1
+Med    R     2    190   2
+High   B     3    180   3
+
+High: Wants mutex...
+
+Task   State Prio Stack Num
+Low    R     3    200   1   <-- Boosted!
+Med    R     2    190   2
+High   B     3    180   3
+
+Low: Releasing mutex.
+
+Task   State Prio Stack Num
+Low    R     1    200   1   <-- Back to normal
+Med    R     2    190   2
+High   R     3    180   3   <-- Runs now
+/*********************************#***************************/
+🔹 TaskStatus_t structure
+typedef struct xTASK_STATUS
+{
+    TaskHandle_t xHandle;           /* Handle to the task */
+    const char *pcTaskName;         /* Task name (string) */
+    UBaseType_t xTaskNumber;        /* Unique task number (optional) */
+
+    eTaskState eCurrentState;       /* Running, Ready, Blocked, Suspended, Deleted */
+    UBaseType_t uxCurrentPriority;  /* Current priority (can be boosted by inheritance) */
+    UBaseType_t uxBasePriority;     /* The task's *original* priority */
+
+    uint32_t ulRunTimeCounter;      /* Cumulative run-time (if run-time stats enabled) */
+    StackType_t *pxStackBase;       /* Pointer to start of stack */
+    uint16_t usStackHighWaterMark;  /* Minimum free stack seen (stack margin) */
+} TaskStatus_t;
+
+🔹 Meaning of the fields
+xHandle → Handle (ID) for the task (you can use this with APIs).
+pcTaskName → Name string (e.g., "LowTask").
+xTaskNumber → Task’s numeric ID (for debugging).
+eCurrentState → State (one of eRunning, eReady, eBlocked, eSuspended, eDeleted, eInvalid).
+uxCurrentPriority → Current priority of the task (⚡ will show inheritance if boosted).
+uxBasePriority → Original priority assigned at creation.
+ulRunTimeCounter → How long the task has executed (if enabled).
+pxStackBase → Pointer to the bottom of the task’s stack.
+usStackHighWaterMark → The minimum free stack left → tells if stack is close to overflow.
+/**********************************#********************************/
+In FreeRTOS, pdTRUE is just a macro constant defined as 1.
+It’s used everywhere in the API for boolean true (instead of plain 1 or true).
+void vTaskGetInfo(
+    TaskHandle_t xTask,
+    TaskStatus_t *pxTaskStatus,
+    BaseType_t xGetFreeStackSpace,   // <- pdTRUE or pdFALSE
+    eTaskState eState
+);
+If xGetFreeStackSpace = pdTRUE, FreeRTOS also calculates how much stack space is still unused for that task (stack high-water mark).
+
+🔹 Task States in FreeRTOS
+typedef enum
+{
+    eRunning = 0,   /* Task is currently running */
+    eReady,         /* Task is ready to run but not running */
+    eBlocked,       /* Task is waiting (e.g., for delay, mutex, queue) */
+    eSuspended,     /* Task is suspended (vTaskSuspend) */
+    eDeleted,       /* Task has been deleted */
+    eInvalid        /* Not used internally, just "invalid" placeholder */
+} eTaskState;
+
+void vTaskGetInfo():
+If you pass an actual state (like eRunning, eReady, etc.) →
+FreeRTOS will only report info if the task is in that state.
+If you pass eInvalid →
+it means “don’t filter, just give me the task’s real current state”. ✅
+/*****************************************#*************************/
+🔹 What is BaseType_t?: It is defined in portmacro.h
+typedef int BaseType_t; or typedef long BaseType_t;
+/*****************************************#*************************/
+🔹 What is fragmentation?
+Fragmentation happens when memory becomes split into small pieces over time, making it hard to allocate bigger blocks even if you still have enough total free RAM.
+It’s a classic problem in dynamic memory allocation (malloc/free or FreeRTOS heap_2).
+1.You allocate 30 bytes (Task A).
+Heap left: 70 bytes.
+[ A:30 ][ Free:70 ]
+
+2.You allocate 20 bytes (Task B).
+Heap left: 50 bytes.
+[ A:30 ][ B:20 ][ Free:50 ]
+
+3.You free Task A (30 bytes).
+[ Free:30 ][ B:20 ][ Free:50 ] # Now total free = 80 bytes. ✅
+
+4.You try to allocate 60 bytes. ❌So allocation fails.
+Even though you have 80 bytes total free, the free space is fragmented into 30 + 50, and no single continuous block of 60 exists.
+
+🔹 Fragmentation Types
+External fragmentation → free memory is split into small, non-contiguous blocks.
+(above example).
+Internal fragmentation → you get a block larger than requested because of alignment or block size overhead.
+
+🔹 How FreeRTOS handles it
+heap_2 → suffers from fragmentation (no block merging).
+heap_4 → can coalesce (merge) adjacent free blocks back into one big block → reduces fragmentation.
+
+✅ Interview tip:
+If asked “Why do we prefer heap_4 over heap_2?” → answer:
+Because heap_4 reduces external fragmentation by merging adjacent free blocks, making long-running systems more reliable.
+
+Here’s a comparison table of FreeRTOS heap memory management schemes (heap_1 … heap_5) – very useful for interviews:
+
+🔹 Types of FreeRTOS heap managers
+1. heap_1 → Simplest (no freeing)
+Only allocates memory (like a bump allocator).
+You can’t free memory once allocated.
+Very fast, no fragmentation.
+Suitable when:
+Tasks and queues are created once at startup and never deleted.
+Think: Static system, very predictable.
+
+2. heap_2 → Malloc + Free (simple free list)
+Allows allocation and freeing.
+Keeps track of free blocks in a linked list.
+But → can cause fragmentation over time.
+Suitable when:
+You need to create/delete tasks dynamically sometimes.
+But memory fragmentation risk is okay.
+
+3. heap_3 → Wrapper around compiler’s malloc()/free()
+Just uses standard C malloc() and free().
+Makes FreeRTOS portable without re-implementing.
+Reliability depends on your C library’s implementation.
+Not great for embedded systems with tight RAM.
+
+4. heap_4 → Best tradeoff (coalescing free blocks)
+Like heap_2 but improved:
+Can merge adjacent free blocks (reduces fragmentation).
+Flexible and widely used.
+Suitable when:
+You need dynamic allocation and freeing often.
+Still want efficient use of RAM.
+
+5. heap_5 → Multiple memory regions
+Like heap_4 but supports multiple separate memory areas.
+Useful if:
+Your MCU has RAM split into different banks (e.g., internal SRAM + external SDRAM).
+You want FreeRTOS to use both.
+
+Great question 👍 — heap_5 is the most advanced FreeRTOS heap scheme, so interviewers often check if you really understand it.
+🔹 Problem that heap_5 solves:
+In embedded systems, RAM may not always be one big continuous block.
+Example:
+MCU with 64 KB internal RAM + 128 KB external RAM.
+These are at different addresses in memory map.
+heap_1..heap_4 only allow one contiguous heap region, so you can’t use both together.
+heap_5 lets you join multiple memory regions into one logical heap.
+
+🔹 How heap_5 Works
+1.You first define multiple regions (start address + size).
+static uint8_t ucHeap1[64 * 1024];   // 64 KB block
+static uint8_t ucHeap2[128 * 1024];  // 128 KB block
+2.In FreeRTOSConfig.h, set:
+#define configUSE_HEAP_SCHEME 5   // select heap_5.c
+3.Define memory regions at startup:
+const HeapRegion_t xHeapRegions[] =
+{
+    { ucHeap1, sizeof( ucHeap1 ) },
+    { ucHeap2, sizeof( ucHeap2 ) },
+    { NULL, 0 }  // terminator
+};
+4.Initialize the heap:
+vPortDefineHeapRegions( xHeapRegions );
+5.From now on → calls to pvPortMalloc() will allocate memory from both regions seamlessly.
+If ucHeap1 fills up, allocation continues from ucHeap2.
+Freeing works too, with block coalescing (like heap_4).
+
+✅ Can use multiple scattered RAM areas.
+✅ Still supports free + coalescing (like heap_4).
+
+🔹 Example Code (heap_5.c usage)
+#include "FreeRTOS.h"
+#include "task.h"
+#include "portable.h"
+#include <stdio.h>
+
+/* Define two memory regions */
+static uint8_t ucHeap1[64 * 1024];   // 64 KB
+static uint8_t ucHeap2[128 * 1024];  // 128 KB
+
+void vApplicationMallocFailedHook(void)
+{
+    printf("Malloc Failed!\n");
+    for(;;);
+}
+
+void vTestTask(void *pvParameters)
+{
+    void *p1, *p2, *p3;
+
+    printf("Task Started\n");
+
+    /* Allocate 40KB - should come from Region 1 */
+    p1 = pvPortMalloc(40 * 1024);
+    printf("Allocated 40KB @ %p\n", p1);
+
+    /* Allocate 50KB - Region 1 has only 24KB left, so this should come from Region 2 */
+    p2 = pvPortMalloc(50 * 1024);
+    printf("Allocated 50KB @ %p\n", p2);
+
+    /* Free the first block */
+    vPortFree(p1);
+    printf("Freed 40KB\n");
+
+    /* Allocate 20KB - should reuse space in Region 1 */
+    p3 = pvPortMalloc(20 * 1024);
+    printf("Allocated 20KB @ %p\n", p3);
+
+    vTaskDelete(NULL);  // End task
+}
+
+int main(void)
+{
+    /* Define multiple regions for heap_5 */
+    const HeapRegion_t xHeapRegions[] =
+    {
+        { ucHeap1, sizeof(ucHeap1) },
+        { ucHeap2, sizeof(ucHeap2) },
+        { NULL, 0 }  // terminator
+    };
+
+    /* Initialize heap_5 with multiple regions */
+    vPortDefineHeapRegions(xHeapRegions);
+
+    printf("Heap_5 initialized with 2 regions\n");
+
+    /* Create a task to test allocation */
+    xTaskCreate(vTestTask, "TestTask", 1024, NULL, 1, NULL);
+
+    /* Start scheduler */
+    vTaskStartScheduler();
+
+    for(;;);
+}
+Heap_5 initialized with 2 regions
+Task Started
+Allocated 40KB @ 0x20000010   <-- Region 1
+Allocated 50KB @ 0x60000010   <-- Region 2
+Freed 40KB
+Allocated 20KB @ 0x20000010   <-- Back to Region 1
